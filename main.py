@@ -5,7 +5,6 @@ from playwright.async_api import async_playwright
 
 app = FastAPI()
 
-# Clave de seguridad para tu webhook
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "TuClaveSecretaSuperSegura123")
 
 class CanjeRequest(BaseModel):
@@ -14,40 +13,42 @@ class CanjeRequest(BaseModel):
 
 async def automatizar_hype(pin: str, player_id: str):
     async with async_playwright() as p:
-        # Abrimos el navegador oculto
         browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
         context = await browser.new_context()
         page = await context.new_page()
 
         try:
-            # 1. Entrar a la página de canje
-            print("Entrando a Hype Games...")
+            print("Conectando a Hype Games...")
             await page.goto("https://redeem.hype.games", timeout=60000)
 
-            # 2. Insertar el PIN y dar clic en CANJEAR
+            print("Buscando campo de PIN...")
+            # Esperamos a que aparezca el input de texto del PIN
+            await page.wait_for_selector("input", timeout=15000)
+            
             print("Insertando PIN...")
-            await page.fill("input[type='text']", pin) 
+            await page.locator("input").first.fill(pin)
+            
+            print("Dando clic en CANJEAR...")
             await page.click("button:has-text('CANJEAR')")
 
-            # 3. Esperar la segunda pantalla, llenar el ID y aceptar términos
-            print("Esperando validación de PIN y llenando ID...")
+            print("Esperando la pantalla del ID de jugador...")
             await page.wait_for_selector("text='Solo necesitamos algunos datos'", timeout=15000)
             
-            # Hay un input para el ID del jugador, lo llenamos
+            print("Escribiendo ID de jugador...")
             await page.locator("input[type='text']").last.fill(player_id)
             
-            # Clic en el checkbox de los términos y condiciones
+            print("Aceptando términos y condiciones...")
             await page.locator("input[type='checkbox']").check()
             
-            # Clic en VERIFICAR ID
+            print("Verificando ID...")
             await page.click("button:has-text('VERIFICAR ID')")
 
-            # 4. Esperar a que el ID sea validado y canjear
-            print("Verificando ID...")
+            print("Esperando confirmación de ID verificado...")
             await page.wait_for_selector("text='ID verificado'", timeout=15000)
+            
+            print("Dando clic en canjear ahora...")
             await page.click("button:has-text('¡CANJEAR AHORA!')")
 
-            # 5. Esperar confirmación final de éxito
             print("Esperando confirmación final...")
             await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.'", timeout=20000)
 
@@ -55,6 +56,7 @@ async def automatizar_hype(pin: str, player_id: str):
             return {"success": True, "message": f"PIN canjeado con éxito para el ID {player_id}."}
 
         except Exception as e:
+            print(f"❌ Error detallado en Playwright: {str(e)}")
             await browser.close()
             return {"success": False, "error": str(e)}
 
