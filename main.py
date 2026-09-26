@@ -27,7 +27,7 @@ async def automatizar_hype(pin: str, player_id: str):
         context = await browser.new_context(
             viewport={"width": 1366, "height": 768},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            locale="es-ES" # Forzamos idioma español en la nube
+            locale="es-ES"
         )
         page = await context.new_page()
 
@@ -39,14 +39,13 @@ async def automatizar_hype(pin: str, player_id: str):
             await page.locator("input").first.fill(pin)
             await page.click("button:has-text('CANJEAR')")
 
-            # --- MANEJO BLINDADO DE COOKIES (Busca Español o Inglés) ---
-            print("Buscando aviso de cookies...")
+            # --- MATAR EL BANNER DE COOKIES POR COMPLETO ---
             try:
-                # Intenta hacer clic en Accept / Aceptar dentro del banner de cookies
-                await page.click("button:has-text('Accept'), button:has-text('Aceptar'), text='Accept', text='Aceptar'", timeout=6000)
-                print("¡Cookies aceptadas con éxito!")
+                await page.click("button:has-text('Accept'), button:has-text('Aceptar')", timeout=4000)
             except:
-                print("No se encontró el botón de cookies o ya estaba cerrado.")
+                pass
+            # Borra cualquier resto de cookies del DOM con JavaScript
+            await page.evaluate("() => { document.querySelectorAll('[id*=\"adopt\"], [class*=\"cookie\"]').forEach(el => el.remove()); }")
 
             await asyncio.sleep(4)
 
@@ -69,15 +68,24 @@ async def automatizar_hype(pin: str, player_id: str):
                     }}
                 """)
 
+            # Aceptar términos y condiciones
             await page.locator("input[type='checkbox']").first.check()
+            
+            # Clic en verificar ID
             await page.click("button:has-text('VERIFICAR ID')")
             
-            # Esperar validación
-            await page.wait_for_selector("text='ID verificado', text='Id do Usuário'", timeout=30000)
-            await page.click("button:has-text('VERIFICAR ID'), button:has-text('¡CANJEAR AHORA!')")
+            # Esperar a que el ID esté verificado
+            print("Esperando validación del ID...")
+            await page.wait_for_selector("text='ID verificado'", timeout=30000)
 
-            await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.', text='ENTREGA'", timeout=45000)
+            # Clic directo y sin dudas en el botón final de canje
+            print("Dando clic en ¡CANJEAR AHORA!...")
+            await page.click("button:has-text('¡CANJEAR AHORA!')")
 
+            # Esperar la confirmación final de éxito
+            await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.'", timeout=45000)
+
+            print("¡Canje exitoso en la nube!")
             await browser.close()
             return {"success": True, "message": f"PIN canjeado con éxito para el ID {player_id}."}
 
