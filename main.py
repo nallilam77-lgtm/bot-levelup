@@ -14,12 +14,24 @@ class CanjeRequest(BaseModel):
 
 async def automatizar_hype(pin: str, player_id: str):
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
-        page = await browser.new_page()
+        # Añadimos argumentos para ocultar que es un bot (Anti-Detection)
+        browser = await p.chromium.launch(
+            headless=True, 
+            args=[
+                "--no-sandbox", 
+                "--disable-setuid-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--start-maximized"
+            ]
+        )
+        context = await browser.new_context(
+            viewport={"width": 1366, "height": 768},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = await context.new_page()
 
         try:
             print(f"Iniciando canje para PIN: {pin} e ID: {player_id}")
-            # Ampliamos el timeout de navegación a 60 segundos
             await page.goto("https://redeem.hype.games", timeout=60000)
 
             await page.wait_for_selector("input", timeout=20000)
@@ -31,10 +43,9 @@ async def automatizar_hype(pin: str, player_id: str):
             except:
                 pass
 
-            # Pausa de seguridad para la animación
             await asyncio.sleep(4)
 
-            # Sistema blindado para escribir el ID dinámico
+            # Escribir ID con el método blindado
             try:
                 caja_id = page.locator("input:not([type='checkbox']):not([type='hidden']):visible").first
                 await caja_id.click(timeout=5000)
@@ -56,20 +67,27 @@ async def automatizar_hype(pin: str, player_id: str):
             await page.locator("input[type='checkbox']").first.check()
             await page.click("button:has-text('VERIFICAR ID')")
             
-            # Timeout ampliado a 30 segundos para la validación del ID
+            # Esperar validación
             await page.wait_for_selector("text='ID verificado'", timeout=30000)
             await page.click("button:has-text('¡CANJEAR AHORA!')")
 
-            # Timeout ampliado a 45 segundos para que la nube espere con calma la pantalla de éxito
             await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.'", timeout=45000)
 
             await browser.close()
             return {"success": True, "message": f"PIN canjeado con éxito para el ID {player_id}."}
 
         except Exception as e:
-            print(f"❌ Error en el proceso: {str(e)}")
+            # Si falla, toma una captura de pantalla y la guarda en la nube para depurar
+            error_msg = str(e)
+            print(f"❌ Error en el proceso: {error_msg}")
+            try:
+                await page.screenshot(path="error_cloud.png", full_page=True)
+                print("📸 Captura de pantalla del error guardada como error_cloud.png")
+            except:
+                pass
+            
             await browser.close()
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": error_msg}
 
 @app.post("/canjear")
 async def procesar_canje(req: CanjeRequest, x_secret_token: str = Header(None)):
