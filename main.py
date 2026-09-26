@@ -6,7 +6,6 @@ from playwright.async_api import async_playwright
 
 app = FastAPI()
 
-# Tu clave de seguridad para que nadie más pueda usar tu bot
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "TuClaveSecretaSuperSegura123")
 
 class CanjeRequest(BaseModel):
@@ -15,30 +14,30 @@ class CanjeRequest(BaseModel):
 
 async def automatizar_hype(pin: str, player_id: str):
     async with async_playwright() as p:
-        # En el servidor debe correr en modo headless (invisible) y sin sandboxing
         browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
         page = await browser.new_page()
 
         try:
             print(f"Iniciando canje para PIN: {pin} e ID: {player_id}")
+            # Ampliamos el timeout de navegación a 60 segundos
             await page.goto("https://redeem.hype.games", timeout=60000)
 
-            await page.wait_for_selector("input", timeout=15000)
+            await page.wait_for_selector("input", timeout=20000)
             await page.locator("input").first.fill(pin)
             await page.click("button:has-text('CANJEAR')")
 
             try:
-                await page.click("text='Aceptar'", timeout=4000)
+                await page.click("text='Aceptar'", timeout=5000)
             except:
                 pass
 
-            # Pausa de seguridad obligatoria
+            # Pausa de seguridad para la animación
             await asyncio.sleep(4)
 
             # Sistema blindado para escribir el ID dinámico
             try:
                 caja_id = page.locator("input:not([type='checkbox']):not([type='hidden']):visible").first
-                await caja_id.click(timeout=3000)
+                await caja_id.click(timeout=5000)
                 await page.keyboard.insert_text(player_id)
             except Exception:
                 await page.evaluate(f"""
@@ -57,11 +56,12 @@ async def automatizar_hype(pin: str, player_id: str):
             await page.locator("input[type='checkbox']").first.check()
             await page.click("button:has-text('VERIFICAR ID')")
             
-            await page.wait_for_selector("text='ID verificado'", timeout=15000)
+            # Timeout ampliado a 30 segundos para la validación del ID
+            await page.wait_for_selector("text='ID verificado'", timeout=30000)
             await page.click("button:has-text('¡CANJEAR AHORA!')")
 
-            # Confirmación final de que los diamantes fueron enviados
-            await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.'", timeout=15000)
+            # Timeout ampliado a 45 segundos para que la nube espere con calma la pantalla de éxito
+            await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.'", timeout=45000)
 
             await browser.close()
             return {"success": True, "message": f"PIN canjeado con éxito para el ID {player_id}."}
