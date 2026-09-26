@@ -1,10 +1,12 @@
 import os
+import asyncio
 from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
 from playwright.async_api import async_playwright
 
 app = FastAPI()
 
+# Tu clave de seguridad para que nadie más pueda usar tu bot
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "TuClaveSecretaSuperSegura123")
 
 class CanjeRequest(BaseModel):
@@ -13,50 +15,59 @@ class CanjeRequest(BaseModel):
 
 async def automatizar_hype(pin: str, player_id: str):
     async with async_playwright() as p:
+        # En el servidor debe correr en modo headless (invisible) y sin sandboxing
         browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
-        context = await browser.new_context()
-        page = await context.new_page()
+        page = await browser.new_page()
 
         try:
-            print("Conectando a Hype Games...")
+            print(f"Iniciando canje para PIN: {pin} e ID: {player_id}")
             await page.goto("https://redeem.hype.games", timeout=60000)
 
-            print("Buscando campo de PIN...")
-            # Esperamos a que aparezca el input de texto del PIN
             await page.wait_for_selector("input", timeout=15000)
-            
-            print("Insertando PIN...")
             await page.locator("input").first.fill(pin)
-            
-            print("Dando clic en CANJEAR...")
             await page.click("button:has-text('CANJEAR')")
 
-            print("Esperando la pantalla del ID de jugador...")
-            await page.wait_for_selector("text='Solo necesitamos algunos datos'", timeout=15000)
-            
-            print("Escribiendo ID de jugador...")
-            await page.locator("input[type='text']").last.fill(player_id)
-            
-            print("Aceptando términos y condiciones...")
-            await page.locator("input[type='checkbox']").check()
-            
-            print("Verificando ID...")
-            await page.click("button:has-text('VERIFICAR ID')")
+            try:
+                await page.click("text='Aceptar'", timeout=4000)
+            except:
+                pass
 
-            print("Esperando confirmación de ID verificado...")
-            await page.wait_for_selector("text='ID verificado'", timeout=15000)
+            # Pausa de seguridad obligatoria
+            await asyncio.sleep(4)
+
+            # Sistema blindado para escribir el ID dinámico
+            try:
+                caja_id = page.locator("input:not([type='checkbox']):not([type='hidden']):visible").first
+                await caja_id.click(timeout=3000)
+                await page.keyboard.insert_text(player_id)
+            except Exception:
+                await page.evaluate(f"""
+                    () => {{
+                        const cajas = Array.from(document.querySelectorAll('input'));
+                        const cajaVisible = cajas.find(i => i.type !== 'checkbox' && i.type !== 'hidden' && i.offsetParent !== null);
+                        if (cajaVisible) {{
+                            cajaVisible.focus();
+                            cajaVisible.value = '{player_id}';
+                            cajaVisible.dispatchEvent(new Event('input', {{bubbles: true}}));
+                            cajaVisible.dispatchEvent(new Event('change', {{bubbles: true}}));
+                        }}
+                    }}
+                """)
+
+            await page.locator("input[type='checkbox']").first.check()
+            await page.click("button:has-text('VERIFICAR ID')")
             
-            print("Dando clic en canjear ahora...")
+            await page.wait_for_selector("text='ID verificado'", timeout=15000)
             await page.click("button:has-text('¡CANJEAR AHORA!')")
 
-            print("Esperando confirmación final...")
-            await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.'", timeout=20000)
+            # Confirmación final de que los diamantes fueron enviados
+            await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.'", timeout=15000)
 
             await browser.close()
             return {"success": True, "message": f"PIN canjeado con éxito para el ID {player_id}."}
 
         except Exception as e:
-            print(f"❌ Error detallado en Playwright: {str(e)}")
+            print(f"❌ Error en el proceso: {str(e)}")
             await browser.close()
             return {"success": False, "error": str(e)}
 
