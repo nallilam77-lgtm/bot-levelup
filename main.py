@@ -1,6 +1,7 @@
 import os
 import asyncio
 from fastapi import FastAPI, HTTPException, Header
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from playwright.async_api import async_playwright
 
@@ -14,7 +15,6 @@ class CanjeRequest(BaseModel):
 
 async def automatizar_hype(pin: str, player_id: str):
     async with async_playwright() as p:
-        # Añadimos argumentos para ocultar que es un bot (Anti-Detection)
         browser = await p.chromium.launch(
             headless=True, 
             args=[
@@ -77,7 +77,6 @@ async def automatizar_hype(pin: str, player_id: str):
             return {"success": True, "message": f"PIN canjeado con éxito para el ID {player_id}."}
 
         except Exception as e:
-            # Si falla, toma una captura de pantalla y la guarda en la nube para depurar
             error_msg = str(e)
             print(f"❌ Error en el proceso: {error_msg}")
             try:
@@ -100,3 +99,10 @@ async def procesar_canje(req: CanjeRequest, x_secret_token: str = Header(None)):
         raise HTTPException(status_code=500, detail=resultado["error"])
 
     return {"status": "success", "result": resultado}
+
+# NUEVA RUTA PARA VER EL ERROR EN VIVO
+@app.get("/ver-error")
+async def ver_error():
+    if os.path.exists("error_cloud.png"):
+        return FileResponse("error_cloud.png")
+    return {"error": "Aún no hay ninguna captura de error guardada."}
