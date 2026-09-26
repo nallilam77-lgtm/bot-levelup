@@ -33,84 +33,113 @@ async def automatizar_hype_secuencial(pines: List[str], player_id: str):
         )
         page = await context.new_page()
 
+        pines_exitosos = []
+        pines_pendientes = list(pines)
+
         try:
             for index, pin in enumerate(pines):
-                print(f"[{index + 1}/{len(pines)}] Iniciando canje para PIN: {pin} e ID: {player_id}")
-                
-                # Si es el segundo pin en adelante, recargamos la página limpia para el siguiente canje
-                if index > 0:
-                    await page.goto("https://redeem.hype.games", timeout=60000)
-                else:
-                    await page.goto("https://redeem.hype.games", timeout=60000)
+                intentos_maximos = 2  # Reintentará hasta 2 veces este pin si falla por timeout
 
-                await page.wait_for_selector("input", timeout=20000)
-                await page.locator("input").first.fill(pin)
-                await page.click("button:has-text('CANJEAR')")
+                for intento in range(1, intentos_maximos + 1):
+                    try:
+                        print(f"[{index + 1}/{len(pines)}] (Intento {intento}/{intentos_maximos}) Iniciando canje para PIN: {pin} e ID: {player_id}")
+                        
+                        await page.goto("https://redeem.hype.games", timeout=60000)
 
-                # Limpiar cookies si molestan
-                try:
-                    await page.click("button:has-text('Accept'), button:has-text('Aceptar')", timeout=4000)
-                except:
-                    pass
-                await page.evaluate("() => { document.querySelectorAll('[id*=\"adopt\"], [class*=\"cookie\"]').forEach(el => el.remove()); }")
+                        await page.wait_for_selector("input", timeout=45000)
+                        await page.locator("input").first.fill(pin)
+                        await page.click("button:has-text('CANJEAR')")
 
-                await asyncio.sleep(3)
+                        # Limpiar cookies si molestan
+                        try:
+                            await page.click("button:has-text('Accept'), button:has-text('Aceptar')", timeout=4000)
+                        except:
+                            pass
+                        await page.evaluate("() => { document.querySelectorAll('[id*=\"adopt\"], [class*=\"cookie\"]').forEach(el => el.remove()); }")
 
-                # Escribir ID con el método blindado
-                try:
-                    caja_id = page.locator("input:not([type='checkbox']):not([type='hidden']):visible").first
-                    await caja_id.click(timeout=5000)
-                    await page.keyboard.insert_text(player_id)
-                except Exception:
-                    await page.evaluate(f"""
-                        () => {{
-                            const cajas = Array.from(document.querySelectorAll('input'));
-                            const cajaVisible = cajas.find(i => i.type !== 'checkbox' && i.type !== 'hidden' && i.offsetParent !== null);
-                            if (cajaVisible) {{
-                                cajaVisible.focus();
-                                cajaVisible.value = '{player_id}';
-                                cajaVisible.dispatchEvent(new Event('input', {{bubbles: true}}));
-                                cajaVisible.dispatchEvent(new Event('change', {{bubbles: true}}));
-                            }}
-                        }}
-                    """)
+                        await asyncio.sleep(3)
 
-                # Aceptar términos y condiciones
-                await page.locator("input[type='checkbox']").first.check()
-                
-                # Clic en verificar ID
-                await page.click("button:has-text('VERIFICAR ID')")
-                
-                # Esperar a que el ID esté verificado
-                await page.wait_for_selector("text='ID verificado'", timeout=30000)
+                        # Escribir ID con el método blindado
+                        try:
+                            caja_id = page.locator("input:not([type='checkbox']):not([type='hidden']):visible").first
+                            await caja_id.click(timeout=5000)
+                            await page.keyboard.insert_text(player_id)
+                        except Exception:
+                            await page.evaluate(f"""
+                                () => {{
+                                    const cajas = Array.from(document.querySelectorAll('input'));
+                                    const cajaVisible = cajas.find(i => i.type !== 'checkbox' && i.type !== 'hidden' && i.offsetParent !== null);
+                                    if (cajaVisible) {{
+                                        cajaVisible.focus();
+                                        cajaVisible.value = '{player_id}';
+                                        cajaVisible.dispatchEvent(new Event('input', {{bubbles: true}}));
+                                        cajaVisible.dispatchEvent(new Event('change', {{bubbles: true}}));
+                                    }}
+                                }}
+                            """)
 
-                # Clic en el botón final de canje
-                await page.click("button:has-text('¡CANJEAR AHORA!')")
+                        # Aceptar términos y condiciones
+                        await page.locator("input[type='checkbox']").first.check()
+                        
+                        # Clic en verificar ID
+                        await page.click("button:has-text('VERIFICAR ID')")
+                        
+                        # Esperar a que el ID esté verificado (Tiempo ampliado a 45s)
+                        await page.wait_for_selector("text='ID verificado'", timeout=45000)
 
-                # Pausa para procesar el salto final del PIN actual
-                await asyncio.sleep(4)
-                print(f"✅ PIN {pin} canjeado con éxito.")
+                        # Clic en el botón final de canje
+                        await page.click("button:has-text('¡CANJEAR AHORA!')")
+
+                        # Pausa para procesar el salto final del PIN actual
+                        await asyncio.sleep(4)
+                        
+                        # ¡Éxito en este pin! Lo movemos a exitosos y salimos del bucle de reintentos
+                        pines_exitosos.append(pin)
+                        pines_pendientes.remove(pin)
+                        print(f"✅ PIN {pin} canjeado con éxito.")
+                        break 
+
+                    except Exception as pin_error:
+                        print(f"⚠️ Fallo en intento {intento} para el PIN {pin}: {str(pin_error)}")
+                        if intento < intentos_maximos:
+                            print(f"🔄 Reintentando canje del PIN {pin} en 3 segundos...")
+                            await asyncio.sleep(3)
+                        else:
+                            # Si se agotaron los reintentos para este pin, lanzamos el error hacia arriba
+                            raise pin_error
 
             await browser.close()
-            return {"success": True, "message": f"Todos los PINes fueron canjeados con éxito para el ID {player_id}."}
+            return {
+                "success": True, 
+                "message": "Todos los PINes fueron canjeados con éxito.",
+                "pines_exitosos": pines_exitosos,
+                "pines_pendientes": pines_pendientes
+            }
 
         except Exception as e:
             error_msg = str(e)
-            print(f"❌ Error en el proceso: {error_msg}")
+            print(f"❌ Error crítico definitivo en el proceso: {error_msg}")
+            if pines_pendientes:
+                print(f"🚨 ADVERTENCIA: Los siguientes PINes NO pudieron ser canjeados y quedaron pendientes: {pines_pendientes}")
+            
             try:
                 await page.screenshot(path="error_cloud.png", full_page=True)
             except:
                 pass
             
             await browser.close()
-            return {"success": False, "error": error_msg}
+            return {
+                "success": False, 
+                "error": error_msg,
+                "pines_exitosos": pines_exitosos,
+                "pines_pendientes": pines_pendientes
+            }
 
 @app.post("/canjear")
 async def procesar_canje(req: CanjeRequest, x_secret_token: str = Header(None)):
     if x_secret_token != WEBHOOK_SECRET:
         raise HTTPException(status_code=401, detail="No autorizado")
 
-    # Unificamos los pines en una lista limpia (soporta tanto 'pin' único como 'pins' en lista)
     lista_pines = []
     if req.pins and isinstance(req.pins, list):
         lista_pines = req.pins
@@ -123,9 +152,18 @@ async def procesar_canje(req: CanjeRequest, x_secret_token: str = Header(None)):
     resultado = await automatizar_hype_secuencial(lista_pines, req.player_id)
     
     if not resultado["success"]:
-        raise HTTPException(status_code=500, detail=resultado["error"])
+        return {
+            "status": "error",
+            "detail": f"Error: {resultado['error']} | PINes NO canjeados: {resultado['pines_pendientes']}",
+            "pines_exitosos": resultado["pines_exitosos"],
+            "pines_pendientes": resultado["pines_pendientes"]
+        }
 
-    return {"status": "success", "result": resultado}
+    return {
+        "status": "success", 
+        "pines_exitosos": resultado["pines_exitosos"],
+        "pines_pendientes": resultado["pines_pendientes"]
+    }
 
 @app.get("/ver-error")
 async def ver_error():
