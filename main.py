@@ -26,7 +26,8 @@ async def automatizar_hype(pin: str, player_id: str):
         )
         context = await browser.new_context(
             viewport={"width": 1366, "height": 768},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            locale="es-ES" # Forzamos idioma español en la nube
         )
         page = await context.new_page()
 
@@ -38,10 +39,14 @@ async def automatizar_hype(pin: str, player_id: str):
             await page.locator("input").first.fill(pin)
             await page.click("button:has-text('CANJEAR')")
 
+            # --- MANEJO BLINDADO DE COOKIES (Busca Español o Inglés) ---
+            print("Buscando aviso de cookies...")
             try:
-                await page.click("text='Aceptar'", timeout=5000)
+                # Intenta hacer clic en Accept / Aceptar dentro del banner de cookies
+                await page.click("button:has-text('Accept'), button:has-text('Aceptar'), text='Accept', text='Aceptar'", timeout=6000)
+                print("¡Cookies aceptadas con éxito!")
             except:
-                pass
+                print("No se encontró el botón de cookies o ya estaba cerrado.")
 
             await asyncio.sleep(4)
 
@@ -68,10 +73,10 @@ async def automatizar_hype(pin: str, player_id: str):
             await page.click("button:has-text('VERIFICAR ID')")
             
             # Esperar validación
-            await page.wait_for_selector("text='ID verificado'", timeout=30000)
-            await page.click("button:has-text('¡CANJEAR AHORA!')")
+            await page.wait_for_selector("text='ID verificado', text='Id do Usuário'", timeout=30000)
+            await page.click("button:has-text('VERIFICAR ID'), button:has-text('¡CANJEAR AHORA!')")
 
-            await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.'", timeout=45000)
+            await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.', text='ENTREGA'", timeout=45000)
 
             await browser.close()
             return {"success": True, "message": f"PIN canjeado con éxito para el ID {player_id}."}
@@ -100,7 +105,6 @@ async def procesar_canje(req: CanjeRequest, x_secret_token: str = Header(None)):
 
     return {"status": "success", "result": resultado}
 
-# NUEVA RUTA PARA VER EL ERROR EN VIVO
 @app.get("/ver-error")
 async def ver_error():
     if os.path.exists("error_cloud.png"):
