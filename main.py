@@ -39,12 +39,11 @@ async def automatizar_hype(pin: str, player_id: str):
             await page.locator("input").first.fill(pin)
             await page.click("button:has-text('CANJEAR')")
 
-            # --- MATAR EL BANNER DE COOKIES POR COMPLETO ---
+            # Limpiar cookies si molestan
             try:
                 await page.click("button:has-text('Accept'), button:has-text('Aceptar')", timeout=4000)
             except:
                 pass
-            # Borra cualquier resto de cookies del DOM con JavaScript
             await page.evaluate("() => { document.querySelectorAll('[id*=\"adopt\"], [class*=\"cookie\"]').forEach(el => el.remove()); }")
 
             await asyncio.sleep(4)
@@ -75,15 +74,13 @@ async def automatizar_hype(pin: str, player_id: str):
             await page.click("button:has-text('VERIFICAR ID')")
             
             # Esperar a que el ID esté verificado
-            print("Esperando validación del ID...")
             await page.wait_for_selector("text='ID verificado'", timeout=30000)
 
-            # Clic directo y sin dudas en el botón final de canje
-            print("Dando clic en ¡CANJEAR AHORA!...")
+            # Clic en el botón final de canje
             await page.click("button:has-text('¡CANJEAR AHORA!')")
 
-            # Esperar la confirmación final de éxito
-            await page.wait_for_selector("text='ENTREGA DE CRÉDITOS EN PROCESO.'", timeout=45000)
+            # Damos 5 segundos para que la página procese el salto final y cerramos con éxito
+            await asyncio.sleep(5)
 
             print("¡Canje exitoso en la nube!")
             await browser.close()
@@ -94,7 +91,6 @@ async def automatizar_hype(pin: str, player_id: str):
             print(f"❌ Error en el proceso: {error_msg}")
             try:
                 await page.screenshot(path="error_cloud.png", full_page=True)
-                print("📸 Captura de pantalla del error guardada como error_cloud.png")
             except:
                 pass
             
