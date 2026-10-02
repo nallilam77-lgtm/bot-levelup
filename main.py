@@ -22,6 +22,8 @@ async def automatizar_hype_secuencial(pines: List[str], player_id: str):
             args=[
                 "--no-sandbox", 
                 "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage", # 🔥 AÑADIDO: Evita que Railway se quede sin memoria compartida
+                "--disable-gpu",           # 🔥 AÑADIDO: Ahorra recursos al apagar aceleración gráfica
                 "--disable-blink-features=AutomationControlled",
                 "--start-maximized"
             ]
