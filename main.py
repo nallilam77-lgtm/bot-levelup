@@ -1,5 +1,6 @@
 import os
 import asyncio
+import hmac
 from typing import List, Union
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import FileResponse
@@ -8,7 +9,18 @@ from playwright.async_api import async_playwright
 
 app = FastAPI()
 
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "TuClaveSecretaSuperSegura123")
+# Sin clave de respaldo en el código: debe configurarse WEBHOOK_SECRET en Railway
+# (y la misma clave en RAILWAY_SECRET de Vercel).
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "").strip()
+if not WEBHOOK_SECRET:
+    print("ERROR: FALTA LA VARIABLE WEBHOOK_SECRET: todas las peticiones protegidas se rechazarán con 503.")
+
+def verificar_secreto(x_secret_token: Union[str, None]):
+    if not WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Bot sin configurar (falta WEBHOOK_SECRET)")
+    # compare_digest evita filtrar la clave midiendo tiempos de respuesta
+    if not x_secret_token or not hmac.compare_digest(x_secret_token.encode(), WEBHOOK_SECRET.encode()):
+        raise HTTPException(status_code=401, detail="No autorizado")
 
 class CanjeRequest(BaseModel):
     pin: Union[str, None] = None
@@ -139,8 +151,7 @@ async def automatizar_hype_secuencial(pines: List[str], player_id: str):
 
 @app.post("/canjear")
 async def procesar_canje(req: CanjeRequest, x_secret_token: str = Header(None)):
-    if x_secret_token != WEBHOOK_SECRET:
-        raise HTTPException(status_code=401, detail="No autorizado")
+    verificar_secreto(x_secret_token)
 
     lista_pines = []
     if req.pins and isinstance(req.pins, list):
@@ -168,7 +179,9 @@ async def procesar_canje(req: CanjeRequest, x_secret_token: str = Header(None)):
     }
 
 @app.get("/ver-error")
-async def ver_error():
+async def ver_error(x_secret_token: str = Header(None)):
+    # La captura puede mostrar IDs de jugadores o PINs: solo con la misma clave del webhook
+    verificar_secreto(x_secret_token)
     if os.path.exists("error_cloud.png"):
         return FileResponse("error_cloud.png")
     return {"error": "Aún no hay ninguna captura de error guardada."}
